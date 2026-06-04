@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureDock</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0e14;
+      --bg2: #0f1520;
+      --bg3: #141c2e;
+      --border: #1e2d47;
+      --accent: #00d4ff;
+      --green: #00e676;
+      --red: #ff3d71;
+      --orange: #ffaa00;
+      --yellow: #ffe066;
+      --text: #c8d8f0;
+      --text-dim: #5a7090;
+      --text-bright: #eaf4ff;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 14px 0;
+      position: sticky;
+      top: 0;
+      background: rgba(10,14,20,0.96);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 30px;
+      height: 30px;
+      border: 1.5px solid var(--accent);
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent);
+      box-shadow: 0 0 10px rgba(0,212,255,0.25);
+    }
+
+    .logo-text {
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .gate-badge {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: var(--mono);
+      letter-spacing: 1px;
+    }
+
+    .gate-pass { background: rgba(0,230,118,0.12); color: var(--green); border: 1px solid rgba(0,230,118,0.35); }
+    .gate-block { background: rgba(255,61,113,0.12); color: var(--red); border: 1px solid rgba(255,61,113,0.35); animation: pulse-red 2s infinite; }
+
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,61,113,0.4); }
+      50% { box-shadow: 0 0 0 5px rgba(255,61,113,0); }
+    }
+
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    main { padding: 24px 0 48px; }
+
+    .section-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--accent);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 16px 18px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+    .stat-card.critical::before { background: var(--red); }
+    .stat-card.high::before { background: var(--orange); }
+    .stat-card.info::before { background: var(--accent); }
+    .stat-card.ok::before { background: var(--green); }
+
+    .stat-label { font-size: 10px; font-family: var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .stat-value { font-size: 32px; font-family: var(--mono); font-weight: 600; color: var(--text-bright); line-height: 1; }
+    .stat-value.red { color: var(--red); }
+    .stat-value.orange { color: var(--orange); }
+    .stat-value.green { color: var(--green); }
+    .stat-value.blue { color: var(--accent); }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 160px repeat(4, 1fr);
+      gap: 0;
+      margin-bottom: 28px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .cmp-header {
+      background: var(--bg3);
+      padding: 12px 16px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+    }
+    .cmp-header.track { color: var(--text-bright); font-size: 11px; }
+    .cmp-header.best { color: var(--accent); border-top: 2px solid var(--accent); }
+
+    .cmp-cell {
+      background: var(--bg2);
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      border-left: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+    }
+    .cmp-cell.metric-label { color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-left: none; background: var(--bg3); }
+    .cmp-cell.best-col { background: rgba(0,212,255,0.04); }
+
+    .bar-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
+    .bar-bg { flex: 1; height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 3px; }
+    .bar-fill.green { background: var(--green); }
+    .bar-fill.blue { background: var(--accent); }
+    .bar-fill.red { background: var(--red); }
+    .bar-val { font-size: 11px; font-weight: 600; min-width: 32px; text-align: right; }
+
+    .cve-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+    .cve-table th { background: var(--bg3); padding: 9px 12px; text-align: left; font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
+    .cve-table td { padding: 10px 12px; border-bottom: 1px solid rgba(30,45,71,0.5); vertical-align: middle; }
+    .cve-table tr:last-child td { border-bottom: none; }
+    .cve-table tr:hover td { background: rgba(0,212,255,0.02); }
+
+    .sev-badge { padding: 2px 7px; border-radius: 3px; font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+    .sev-critical { background: rgba(255,61,113,0.2); color: var(--red); }
+    .sev-high { background: rgba(255,170,0,0.2); color: var(--orange); }
+    .sev-medium { background: rgba(255,224,102,0.15); color: var(--yellow); }
+    .sev-low { background: rgba(0,144,204,0.15); color: var(--accent); }
+
+    .track-cell { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dot.pass { background: var(--green); box-shadow: 0 0 4px var(--green); }
+    .dot.fail { background: var(--red); }
+    .dot.unknown { background: var(--text-dim); }
+
+    .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 7px; padding: 16px 20px; }
+
+    .delta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .delta-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg3); border-radius: 6px; border: 1px solid var(--border); }
+    .delta-num { font-family: var(--mono); font-size: 24px; font-weight: 600; }
+    .delta-desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+
+    .sbom-status { font-family: var(--mono); font-size: 11px; padding: 8px 12px; background: var(--bg3); border-radius: 5px; border: 1px solid var(--border); }
+
+    .violation { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; margin-bottom: 8px; border-radius: 5px; border-left: 3px solid; }
+    .violation:last-child { margin-bottom: 0; }
+    .violation.critical { background: rgba(255,61,113,0.07); border-color: var(--red); }
+    .violation.high { background: rgba(255,170,0,0.07); border-color: var(--orange); }
+    .violation-icon { font-size: 13px; margin-top: 1px; }
+    .violation-text { font-size: 12px; line-height: 1.5; }
+    .violation-rule { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+    @media (max-width: 900px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .bottom-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">SD</div>
+        <div class="logo-text">SecureDock</div>
+      </div>
+      <div class="header-right">
+        <button class="refresh-btn" onclick="location.reload()">↻ Refresh</button>
+        <span class="gate-badge {{ 'gate-pass' if data.gate.get('gate_passed', True) else 'gate-block' }}">
+          GATE: {{ data.gate.get('decision', 'PENDING') }}
+        </span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+
+    <!-- Stats -->
+    <div class="stat-grid">
+      <div class="stat-card critical">
+        <div class="stat-label">Critical</div>
+        <div class="stat-value red">{{ data.gate.get('severity_counts', {}).get('critical', 0) }}</div>
+      </div>
+      <div class="stat-card high">
+        <div class="stat-label">High</div>
+        <div class="stat-value orange">{{ data.gate.get('severity_counts', {}).get('high', 0) }}</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-label">Total CVEs</div>
+        <div class="stat-value blue">{{ data.total_cves }}</div>
+      </div>
+      <div class="stat-card ok">
+        <div class="stat-label">Best Track</div>
+        <div class="stat-value" style="font-size:18px; padding-top:6px;">
+          {{ data.evaluation.get('best_track', 'N/A').replace('_', ' ').upper() }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Track Comparison -->
+    <div class="section-label">Remediation Track Comparison</div>
+    {% set tracks = data.evaluation.get('tracks', {}) %}
+    {% set best = data.evaluation.get('best_track', '') %}
+
+    <div class="comparison-grid">
+      <div class="cmp-header">Metric</div>
+      {% for key, track in tracks.items() %}
+      <div class="cmp-header track {{ 'best' if key == best }}">{{ track.label }}</div>
+      {% endfor %}
+
+      <div class="cmp-cell metric-label">Fix Validity</div>
+      {% for key, track in tracks.items() %}
+      <div class="cmp-cell {{ 'best-col' if key == best }}">
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill green" style="width:{{ (track.fix_validity_rate * 100)|round|int }}%"></div></div>
+          <span class="bar-val" style="color:var(--green)">{{ (track.fix_validity_rate * 100)|round|int }}%</span>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="cmp-cell metric-label">Reachability</div>
+      {% for key, track in tracks.items() %}
+      <div class="cmp-cell {{ 'best-col' if key == best }}">
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill blue" style="width:{{ (track.reachability_accuracy * 100)|round|int }}%"></div></div>
+          <span class="bar-val" style="color:var(--accent)">{{ (track.reachability_accuracy * 100)|round|int }}%</span>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="cmp-cell metric-label">False Positives</div>
+      {% for key, track in tracks.items() %}
+      <div class="cmp-cell {{ 'best-col' if key == best }}">
+        <div class="bar-wrap">
+          <div class="bar-bg"><div class="bar-fill red" style="width:{{ (track.false_positive_rate * 100)|round|int }}%"></div></div>
+          <span class="bar-val" style="color:var(--red)">{{ (track.false_positive_rate * 100)|round|int }}%</span>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="cmp-cell metric-label">MTTR</div>
+      {% for key, track in tracks.items() %}
+      <div class="cmp-cell {{ 'best-col' if key == best }}">
+        <span style="font-size:13px; font-weight:600; color:var(--text-bright)">{{ track.avg_mttr_seconds }}s</span>
+      </div>
+      {% endfor %}
+
+      <div class="cmp-cell metric-label" style="border-bottom:none;">Score</div>
+      {% for key, track in tracks.items() %}
+      <div class="cmp-cell {{ 'best-col' if key == best }}" style="border-bottom:none;">
+        <span style="font-size:17px; font-weight:700; color:{{ 'var(--accent)' if key == best else 'var(--text)' }}">
+          {{ (track.weighted_score * 100)|round(1) }}
+        </span>
+        <span style="font-size:10px; color:var(--text-dim); margin-left:3px;">/100</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- CVE Breakdown -->
+    <div class="section-label">CVE Breakdown</div>
+    <div class="card" style="margin-bottom:28px; padding:0; overflow:hidden;">
+      <table class="cve-table">
+        <thead>
+          <tr>
+            <th>CVE</th>
+            <th>Severity</th>
+            <th>Ground Truth</th>
+            <th>Manual</th>
+            <th>Zero-Shot</th>
+            <th>Few-Shot</th>
+            <th>AI Agent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cve in data.evaluation.get('cve_comparison', []) %}
+          <tr>
+            <td style="color:var(--text-bright)">{{ cve.cve_id }}</td>
+            <td><span class="sev-badge sev-{{ cve.severity }}">{{ cve.severity }}</span></td>
+            <td style="color:var(--text-dim)">{{ 'Reachable' if cve.ground_truth_reachable else 'Not Reachable' }}</td>
+
+            {% set m = cve.tracks.get('manual') %}
+            <td>{% if m %}<div class="track-cell"><div class="dot {{ 'pass' if m.fix_verified else 'fail' }}"></div><span>{{ 'Fixed' if m.fix_verified else 'Unresolved' }}</span></div>{% else %}<span style="color:var(--text-dim)">—</span>{% endif %}</td>
+
+            {% set z = cve.tracks.get('zero_shot') %}
+            <td>{% if z %}<div class="track-cell"><div class="dot {{ 'pass' if z.reachability_correct else ('unknown' if z.reachability_correct is none else 'fail') }}"></div><span>{{ z.reachability }}</span></div>{% else %}<span style="color:var(--text-dim)">—</span>{% endif %}</td>
+
+            {% set f = cve.tracks.get('few_shot') %}
+            <td>{% if f %}<div class="track-cell"><div class="dot {{ 'pass' if f.reachability_correct else ('unknown' if f.reachability_correct is none else 'fail') }}"></div><span>{{ f.reachability }}</span></div>{% else %}<span style="color:var(--text-dim)">—</span>{% endif %}</td>
+
+            {% set a = cve.tracks.get('ai_agent') %}
+            <td>{% if a %}<div class="track-cell"><div class="dot {{ 'pass' if a.fix_verified else 'fail' }}"></div><span>{{ 'Verified' if a.fix_verified else 'Unverified' }}</span>{% if a.pr_url %}<a href="{{ a.pr_url }}" style="color:var(--accent);font-size:10px;margin-left:6px;" target="_blank">PR ↗</a>{% endif %}</div>{% else %}<span style="color:var(--text-dim)">—</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- SBOM + Violations -->
+    <div class="bottom-grid">
+      <div>
+        <div class="section-label">SBOM Delta</div>
+        <div class="card">
+          {% set delta = data.sbom_delta.get('summary', {}) %}
+          <div class="delta-row">
+            <div class="delta-item">
+              <div class="delta-num" style="color:var(--red)">{{ delta.get('new_cves_introduced', 0) }}</div>
+              <div class="delta-desc">New CVEs<br>introduced</div>
+            </div>
+            <div class="delta-item">
+              <div class="delta-num" style="color:var(--green)">{{ delta.get('cves_resolved', 0) }}</div>
+              <div class="delta-desc">CVEs<br>resolved</div>
+            </div>
+          </div>
+          <div class="sbom-status">
+            SBOM: <span style="color:{{ 'var(--red)' if data.sbom_delta.get('is_regression') else 'var(--green)' }}; font-weight:600;">
+              {{ 'REGRESSION' if data.sbom_delta.get('is_regression') else 'CLEAN' }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Gate Violations</div>
+        <div class="card">
+          {% set violations = data.gate.get('violations', []) %}
+          {% if violations %}
+            {% for v in violations %}
+            <div class="violation {{ v.severity }}">
+              <div class="violation-icon">{{ '🔴' if v.severity == 'critical' else '🟠' }}</div>
+              <div>
+                <div class="violation-text">{{ v.message }}</div>
+                <div class="violation-rule">{{ v.rule }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div style="color:var(--green); font-family:var(--mono); font-size:12px; padding:14px; text-align:center;">✓ No violations</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+</body>
+</html>
