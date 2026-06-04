@@ -1,0 +1,173 @@
+version: "3.9"
+
+volumes:
+  reports:
+  baseline:
+
+networks:
+  securedock:
+    driver: bridge
+
+x-common-env: &common-env
+  REPORTS_DIR: /reports
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  DEMO_MODE: ${DEMO_MODE:-true}
+
+services:
+
+  target-app:
+    build:
+      context: ./target-app
+      dockerfile: Dockerfile
+    container_name: securedock-target
+    ports:
+      - "3000:3000"
+    networks: [securedock]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  scanner:
+    build:
+      context: ./services/scanner
+      dockerfile: Dockerfile
+    container_name: securedock-scanner
+    environment:
+      <<: *common-env
+      SNYK_TOKEN: ${SNYK_TOKEN:-}
+      IMAGE_NAME: securedock-target:latest
+    volumes:
+      - reports:/reports
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [securedock]
+    depends_on:
+      target-app:
+        condition: service_healthy
+    restart: "no"
+
+  sbom-differ:
+    build:
+      context: ./services/sbom-differ
+      dockerfile: Dockerfile
+    container_name: securedock-sbom-differ
+    environment:
+      REPORTS_DIR: /reports
+      BASELINE_DIR: /baseline
+    volumes:
+      - reports:/reports
+      - baseline:/baseline
+    networks: [securedock]
+    depends_on: [scanner]
+    restart: "no"
+
+  manual-agent:
+    build:
+      context: ./services/manual-agent
+      dockerfile: Dockerfile
+    container_name: securedock-manual
+    environment:
+      REPORTS_DIR: /reports
+    volumes:
+      - reports:/reports
+    networks: [securedock]
+    depends_on: [scanner]
+    restart: "no"
+
+  zero-shot-llm:
+    build:
+      context: ./services/zero-shot-llm
+      dockerfile: Dockerfile
+    container_name: securedock-zero-shot
+    environment:
+      <<: *common-env
+    volumes:
+      - reports:/reports
+      - ./target-app/ground_truth.json:/app/ground_truth.json:ro
+    networks: [securedock]
+    depends_on: [scanner]
+    restart: "no"
+
+  few-shot-llm:
+    build:
+      context: ./services/few-shot-llm
+      dockerfile: Dockerfile
+    container_name: securedock-few-shot
+    environment:
+      <<: *common-env
+    volumes:
+      - reports:/reports
+      - ./target-app/ground_truth.json:/app/ground_truth.json:ro
+    networks: [securedock]
+    depends_on: [scanner]
+    restart: "no"
+
+  ai-agent:
+    build:
+      context: ./services/ai-agent
+      dockerfile: Dockerfile
+    container_name: securedock-ai-agent
+    environment:
+      <<: *common-env
+      POLICY_PATH: /policy/policy.yaml
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+    volumes:
+      - reports:/reports
+      - ./policy:/policy:ro
+      - ./target-app/ground_truth.json:/app/ground_truth.json:ro
+    networks: [securedock]
+    depends_on: [scanner, sbom-differ]
+    restart: "no"
+
+  evaluator:
+    build:
+      context: ./services/evaluator
+      dockerfile: Dockerfile
+    container_name: securedock-evaluator
+    environment:
+      REPORTS_DIR: /reports
+      GROUND_TRUTH_PATH: /app/ground_truth.json
+    volumes:
+      - reports:/reports
+      - ./target-app/ground_truth.json:/app/ground_truth.json:ro
+    networks: [securedock]
+    depends_on: [manual-agent, zero-shot-llm, few-shot-llm, ai-agent]
+    restart: "no"
+
+  gate:
+    build:
+      context: ./services/gate
+      dockerfile: Dockerfile
+    container_name: securedock-gate
+    environment:
+      REPORTS_DIR: /reports
+      POLICY_PATH: /policy/policy.yaml
+      PIPELINE_EVENT: ${PIPELINE_EVENT:-push}
+    volumes:
+      - reports:/reports
+      - ./policy:/policy:ro
+    networks: [securedock]
+    depends_on: [evaluator, sbom-differ]
+    restart: "no"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: securedock-dashboard
+    environment:
+      REPORTS_DIR: /reports
+    volumes:
+      - reports:/reports
+    ports:
+      - "5050:5050"
+    networks: [securedock]
+    depends_on: [evaluator, gate]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5050/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
