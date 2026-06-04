@@ -1,0 +1,270 @@
+name: SecureDock CI/CD Security Pipeline
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_REPO: ${{ github.repository }}
+  DEMO_MODE: ${{ secrets.SNYK_TOKEN == '' && 'true' || 'false' }}
+
+jobs:
+
+  build:
+    name: Build Container Image
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: echo "tag=securedock-target:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build -t securedock-target:latest \
+                       -t ${{ steps.meta.outputs.tag }} \
+                       ./target-app
+
+      - name: Save image
+        run: docker save securedock-target:latest | gzip > /tmp/target-image.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: target-image
+          path: /tmp/target-image.tar.gz
+          retention-days: 1
+
+  scan:
+    name: Snyk Scan & SBOM
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: target-image
+          path: /tmp
+
+      - name: Load Docker image
+        run: docker load < /tmp/target-image.tar.gz
+
+      - name: Run scanner service
+        run: |
+          mkdir -p reports
+          docker run --rm \
+            -v $(pwd)/reports:/reports \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -e SNYK_TOKEN=${{ env.SNYK_TOKEN }} \
+            -e DEMO_MODE=${{ env.DEMO_MODE }} \
+            -e IMAGE_NAME=securedock-target:latest \
+            $(docker build -q ./services/scanner)
+
+      - name: Run SBOM differ
+        run: |
+          mkdir -p reports/baseline
+          docker run --rm \
+            -v $(pwd)/reports:/reports \
+            -v $(pwd)/reports/baseline:/baseline \
+            $(docker build -q ./services/sbom-differ)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scan-reports
+          path: reports/
+          retention-days: 7
+
+  triage:
+    name: AI Triage (${{ matrix.track }})
+    runs-on: ubuntu-latest
+    needs: scan
+    strategy:
+      matrix:
+        track: [manual, zero-shot, few-shot, ai-agent]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: scan-reports
+          path: reports/
+
+      - name: Run ${{ matrix.track }} track
+        env:
+          PIPELINE_EVENT: ${{ github.event_name == 'pull_request' && 'pr' || (github.ref == 'refs/heads/main' && 'merge' || 'push') }}
+        run: |
+          SERVICE_DIR="services/${{ matrix.track }}-agent"
+          if [ "${{ matrix.track }}" = "zero-shot" ] || [ "${{ matrix.track }}" = "few-shot" ]; then
+            SERVICE_DIR="services/${{ matrix.track }}-llm"
+          fi
+          if [ "${{ matrix.track }}" = "manual" ]; then
+            SERVICE_DIR="services/manual-agent"
+          fi
+
+          docker run --rm \
+            -v $(pwd)/reports:/reports \
+            -v $(pwd)/target-app/ground_truth.json:/app/ground_truth.json:ro \
+            -v $(pwd)/policy:/policy:ro \
+            -e ANTHROPIC_API_KEY=${{ env.ANTHROPIC_API_KEY }} \
+            -e REPORTS_DIR=/reports \
+            -e POLICY_PATH=/policy/policy.yaml \
+            -e GITHUB_TOKEN=${{ env.GITHUB_TOKEN }} \
+            -e GITHUB_REPO=${{ env.GITHUB_REPO }} \
+            $(docker build -q $SERVICE_DIR)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: triage-${{ matrix.track }}
+          path: reports/${{ matrix.track }}_results.json
+          retention-days: 7
+
+  evaluate:
+    name: Evaluate All Tracks
+    runs-on: ubuntu-latest
+    needs: triage
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: scan-reports
+          path: reports/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: triage-manual
+          path: reports/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: triage-zero-shot
+          path: reports/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: triage-few-shot
+          path: reports/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: triage-ai-agent
+          path: reports/
+
+      - name: Run evaluator
+        run: |
+          docker run --rm \
+            -v $(pwd)/reports:/reports \
+            -v $(pwd)/target-app/ground_truth.json:/app/ground_truth.json:ro \
+            -e REPORTS_DIR=/reports \
+            $(docker build -q ./services/evaluator)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evaluation
+          path: reports/evaluation.json
+          retention-days: 30
+
+  gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs: evaluate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: scan-reports
+          path: reports/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: evaluation
+          path: reports/
+
+      - name: Run security gate
+        id: gate
+        env:
+          PIPELINE_EVENT: ${{ github.event_name == 'pull_request' && 'pr' || (github.ref == 'refs/heads/main' && 'merge' || 'push') }}
+        run: |
+          docker run --rm \
+            -v $(pwd)/reports:/reports \
+            -v $(pwd)/policy:/policy:ro \
+            -e REPORTS_DIR=/reports \
+            -e POLICY_PATH=/policy/policy.yaml \
+            -e PIPELINE_EVENT=$PIPELINE_EVENT \
+            $(docker build -q ./services/gate)
+          echo "gate_passed=$?" >> $GITHUB_OUTPUT
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const gate = JSON.parse(fs.readFileSync('reports/gate_result.json', 'utf8'));
+            const eval_ = JSON.parse(fs.readFileSync('reports/evaluation.json', 'utf8'));
+            const tracks = eval_.tracks || {};
+            const icon = gate.gate_passed ? '✅' : '🚨';
+            let body = `## ${icon} SecureDock Security Gate: **${gate.decision}**\n\n`;
+            body += `| Track | Fix Rate | Reachability Acc | Score |\n`;
+            body += `|---|---|---|---|\n`;
+            for (const [k, t] of Object.entries(tracks)) {
+              const best = k === eval_.best_track ? ' ⭐' : '';
+              body += `| ${t.label}${best} | ${(t.fix_validity_rate*100).toFixed(0)}% | ${(t.reachability_accuracy*100).toFixed(0)}% | ${(t.weighted_score*100).toFixed(1)} |\n`;
+            }
+            if (gate.violations?.length) {
+              body += `\n### Violations\n`;
+              gate.violations.forEach(v => { body += `- **[${v.severity.toUpperCase()}]** ${v.message}\n`; });
+            }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+  push-image:
+    name: Push to Registry
+    runs-on: ubuntu-latest
+    needs: gate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: target-image
+          path: /tmp
+
+      - name: Load image
+        run: docker load < /tmp/target-image.tar.gz
+
+      - name: Tag for registry
+        run: |
+          docker tag securedock-target:latest \
+            ghcr.io/${{ github.repository_owner }}/securedock-target:${{ github.sha }}
+          docker tag securedock-target:latest \
+            ghcr.io/${{ github.repository_owner }}/securedock-target:latest
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push image
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/securedock-target:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/securedock-target:latest
+
+      - name: Deployment summary
+        run: |
+          echo "Image pushed: ghcr.io/${{ github.repository_owner }}/securedock-target:${{ github.sha }}"
