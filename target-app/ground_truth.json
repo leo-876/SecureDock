@@ -1,0 +1,65 @@
+{
+  "app_version": "1.0.0",
+  "labeled_cves": [
+    {
+      "id": "CVE-2017-5941",
+      "package": "node-serialize",
+      "current_version": "0.0.4",
+      "severity": "critical",
+      "reachable": true,
+      "reachability_reason": "The /deserialize endpoint directly calls serialize.unserialize() on user input with no sanitization",
+      "correct_fix": "Remove node-serialize entirely; use JSON.parse() with validation",
+      "correct_fix_version": null,
+      "fix_type": "remove_package",
+      "expected_rescan_result": "closed"
+    },
+    {
+      "id": "CVE-2019-10744",
+      "package": "lodash",
+      "current_version": "4.17.15",
+      "severity": "high",
+      "reachable": true,
+      "reachability_reason": "The /merge endpoint calls lodash.defaultsDeep() on raw request body enabling prototype pollution",
+      "correct_fix": "Upgrade lodash to 4.17.21",
+      "correct_fix_version": "4.17.21",
+      "fix_type": "upgrade",
+      "expected_rescan_result": "closed"
+    },
+    {
+      "id": "CVE-2023-45857",
+      "package": "axios",
+      "current_version": "0.21.1",
+      "severity": "medium",
+      "reachable": false,
+      "reachability_reason": "XSRF token leak requires browser-based cross-origin requests; this is a server-side Node.js context with no browser session",
+      "correct_fix": "Upgrade axios to 1.6.0 or later",
+      "correct_fix_version": "1.6.0",
+      "fix_type": "upgrade",
+      "expected_rescan_result": "closed"
+    },
+    {
+      "id": "CWE-798",
+      "package": "application-code",
+      "current_version": null,
+      "severity": "high",
+      "reachable": true,
+      "reachability_reason": "Hardcoded DB_PASSWORD and API_KEY are in production source code and will be exposed in container image layers",
+      "correct_fix": "Move secrets to environment variables and use a secrets manager",
+      "correct_fix_version": null,
+      "fix_type": "code_change",
+      "expected_rescan_result": "closed"
+    },
+    {
+      "id": "CVE-2021-23337",
+      "package": "lodash",
+      "current_version": "4.17.15",
+      "severity": "high",
+      "reachable": false,
+      "reachability_reason": "This CVE affects lodash.template() which is not called anywhere in this codebase",
+      "correct_fix": "Upgrade lodash to 4.17.21",
+      "correct_fix_version": "4.17.21",
+      "fix_type": "upgrade",
+      "expected_rescan_result": "closed"
+    }
+  ]
+}
