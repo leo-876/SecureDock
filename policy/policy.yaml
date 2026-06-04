@@ -1,0 +1,37 @@
+# SecureDock Security Policy
+# Controls what the gate will block at each pipeline stage
+
+gate:
+  block_on_push:
+    min_severity: critical        # block push if any critical CVE found
+    max_critical: 0
+    max_high: 5
+
+  block_on_pr:
+    min_severity: high
+    max_critical: 0
+    max_high: 2
+    require_ai_triage: true       # PR must have AI triage before merge
+
+  block_on_merge:
+    max_critical: 0
+    max_high: 0                   # zero tolerance on merge to main
+    require_sbom_delta_clean: true
+    require_fix_verified: true    # at least one track must have verified fix
+
+sbom:
+  baseline_branch: main
+  block_on_new_cves: true         # block if merge introduces new CVEs vs baseline
+  ignore_severities: []           # severities to never block on (e.g. ["low"])
+
+remediation:
+  auto_pr_on_critical: true       # ai-agent auto-opens fix PR for criticals
+  auto_pr_on_high: true
+  reachable_only: false           # triage unreachable but still flag them
+
+scoring:
+  weights:
+    reachability_accuracy: 0.35
+    fix_validity_rate: 0.40
+    false_positive_rate: 0.15
+    mttr_score: 0.10
