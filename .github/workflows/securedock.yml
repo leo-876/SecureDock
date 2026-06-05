@@ -102,15 +102,14 @@ jobs:
         env:
           PIPELINE_EVENT: ${{ github.event_name == 'pull_request' && 'pr' || (github.ref == 'refs/heads/main' && 'merge' || 'push') }}
         run: |
-          SERVICE_DIR="services/${{ matrix.track }}-agent"
-          if [ "${{ matrix.track }}" = "zero-shot" ] || [ "${{ matrix.track }}" = "few-shot" ]; then
-            SERVICE_DIR="services/${{ matrix.track }}-llm"
-          fi
-          if [ "${{ matrix.track }}" = "manual" ]; then
-            SERVICE_DIR="services/manual-agent"
-          fi
-          if [ "${{ matrix.track }}" = "ai-agent" ]; then
+          if [ "${{ matrix.track }}" = "zero-shot" ]; then
+            SERVICE_DIR="services/zero-shot-llm"
+          elif [ "${{ matrix.track }}" = "few-shot" ]; then
+            SERVICE_DIR="services/few-shot-llm"
+          elif [ "${{ matrix.track }}" = "ai-agent" ]; then
             SERVICE_DIR="services/ai-agent"
+          else
+            SERVICE_DIR="services/manual-agent"
           fi
 
           docker run --rm \
@@ -124,10 +123,11 @@ jobs:
             -e GITHUB_REPO=${{ env.GITHUB_REPO }} \
             $(docker build -q $SERVICE_DIR)
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload triage results
+        uses: actions/upload-artifact@v4
         with:
           name: triage-${{ matrix.track }}
-          path: reports/${{ matrix.track }}_results.json
+          path: reports/
           retention-days: 7
 
   evaluate:
@@ -139,27 +139,13 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          pattern: triage-*
+          path: reports/
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
           name: scan-reports
-          path: reports/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: triage-manual
-          path: reports/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: triage-zero-shot
-          path: reports/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: triage-few-shot
-          path: reports/
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: triage-ai-agent
           path: reports/
 
       - name: Run evaluator
