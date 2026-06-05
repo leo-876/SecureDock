@@ -109,6 +109,9 @@ jobs:
           if [ "${{ matrix.track }}" = "manual" ]; then
             SERVICE_DIR="services/manual-agent"
           fi
+          if [ "${{ matrix.track }}" = "ai-agent" ]; then
+            SERVICE_DIR="services/ai-agent"
+          fi
 
           docker run --rm \
             -v $(pwd)/reports:/reports \
