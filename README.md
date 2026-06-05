@@ -2,6 +2,8 @@
 
 DevSecOps pipeline that detects and remediates container vulnerabilities across the CI/CD lifecycle, benchmarking zero-shot, few-shot, and agentic AI remediation approaches.
 
+![UI screenshot](screenshots/UI.png)
+
 ## Stack
 
 Snyk, Anthropic API, Docker Compose, GitHub Actions, Flask
