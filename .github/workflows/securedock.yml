@@ -5,8 +5,6 @@ on:
     branches: ["**"]
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
