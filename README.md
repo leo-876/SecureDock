@@ -1,6 +1,6 @@
 # SecureDock
 
-DevSecOps pipeline that detects and remediates container vulnerabilities across the CI/CD lifecycle, benchmarking zero-shot, few-shot, and agentic AI remediation approaches.
+DevSecOps pipeline that scans container images for vulnerabilities and benchmarks zero-shot, few-shot, and agentic AI remediation approaches against a manual baseline.
 
 ![UI screenshot](screenshots/UI.png)
 
@@ -10,13 +10,13 @@ Snyk, Anthropic API, Docker Compose, GitHub Actions, Flask
 
 ## What it does
 
-Hooks into push, pull request, and merge events. For every run:
+On every code push, SecureDock builds the target container image, scans it with Snyk, and runs four remediation tracks in parallel:
 
 1. Builds the container image and scans it with Snyk
 2. Generates a CycloneDX SBOM and diffs it against the last clean baseline
-3. Runs three remediation tracks in parallel: manual, zero-shot LLM, few-shot LLM, and an engineered AI agent
+3. Runs four remediation tracks in parallel: manual, zero-shot LLM, few-shot LLM, and an engineered AI agent
 4. Evaluates all tracks against labeled ground truth
-5. Enforces a policy gate that blocks merge on critical CVEs or SBOM regressions
+5. Enforces a policy gate that blocks deployment on critical CVEs or SBOM regressions
 6. Surfaces results in a dashboard at `http://localhost:5050`
 
 ## Services
@@ -48,14 +48,6 @@ chmod +x scripts/run.sh
 ```
 
 Dashboard: `http://localhost:5050`
-
-## Pipeline Events
-
-| Event | Gate policy |
-|---|---|
-| Push | Block if any critical CVE |
-| Pull request | Block if critical or >2 high CVEs |
-| Merge to main | Zero tolerance, SBOM must be regression-free |
 
 ## Environment Variables
 
